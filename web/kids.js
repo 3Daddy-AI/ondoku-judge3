@@ -30,7 +30,7 @@ photoInput.addEventListener('change', async (e)=>{
   const f=e.target.files?.[0]; if(!f) return; resetOCR();
   ocrStatus.textContent='よみとり中（しゃしん）…';
   const imgUrl=URL.createObjectURL(f);
-  const { data } = await Tesseract.recognize(imgUrl, 'jpn', { logger: m=>{ /*progress*/ } });
+  const { data } = await Tesseract.recognize(imgUrl, 'jpn', { langPath: 'https://tessdata.projectnaptha.com/4.0.0', logger: m=>{ /*progress*/ } });
   refText.value = (data.text||'').trim();
   ocrStatus.textContent='よみとり かんりょう！';
 });
@@ -40,7 +40,12 @@ pdfInput.addEventListener('change', async (e)=>{
   try {
     ocrStatus.textContent='よみとり中（PDF）…';
     const array = await f.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data:array}).promise;
+    const pdf = await pdfjsLib.getDocument({
+      data: array,
+      cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/standard_fonts/'
+    }).promise;
     let all='';
     for(let i=1;i<=pdf.numPages;i++){
       ocrStatus.textContent = `よみとり中（PDF ページ ${i}/${pdf.numPages}）…`;
@@ -52,7 +57,7 @@ pdfInput.addEventListener('change', async (e)=>{
         pageText = (tc.items||[]).map(it=>it.str).join('');
       } catch {}
 
-      if (pageText && pageText.trim().length >= 10) {
+      if (pageText && pageText.trim().length >= 10 && !isGarbled(pageText)) {
         all += '\n' + pageText;
         continue;
       }
@@ -63,7 +68,7 @@ pdfInput.addEventListener('change', async (e)=>{
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       await page.render({canvasContext:ctx, viewport}).promise;
-      const { data } = await Tesseract.recognize(canvas, 'jpn', { logger: m=>{ /* progress */ } });
+      const { data } = await Tesseract.recognize(canvas, 'jpn', { langPath: 'https://tessdata.projectnaptha.com/4.0.0', logger: m=>{ /* progress */ } });
       all += '\n' + (data.text||'');
     }
     const text = all.trim();
@@ -80,6 +85,22 @@ pdfInput.addEventListener('change', async (e)=>{
 });
 
 function resetOCR(){ ocrStatus.textContent=''; }
+
+function isGarbled(text){
+  const s = text.replace(/\s+/g,'');
+  if(s.length < 10) return false;
+  let jp=0, latin=0, other=0;
+  for(const ch of s){
+    const code = ch.codePointAt(0);
+    if(!code) continue;
+    if((code>=0x3040&&code<=0x30FF)/*ひらカナ*/ || (code>=0x4E00&&code<=0x9FFF)/*漢字*/){ jp++; }
+    else if((code>=0x0020&&code<=0x007E)/*ASCII*/){ latin++; }
+    else { other++; }
+  }
+  const ratio = jp / (jp+latin+other);
+  // 日本語率が極端に低いなら文字化けとみなす
+  return ratio < 0.2;
+}
 
 // 2) 録音（Web Speech API）
 const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
