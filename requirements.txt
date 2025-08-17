@@ -1,0 +1,4 @@
+vosk
+pykakasi
+soundfile
+numpy

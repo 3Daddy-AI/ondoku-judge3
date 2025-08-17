@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>おんどく判定（PWA）</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>おんどく判定</h1>
+    <div class="toolbar">
+      <select id="grade">
+        <option value="g1">小1</option>
+        <option value="g2">小2</option>
+        <option value="g3" selected>小3</option>
+        <option value="g4">小4</option>
+        <option value="g5">小5</option>
+        <option value="g6">小6</option>
+      </select>
+      <select id="asrMode">
+        <option value="vosk">Vosk (WASM)</option>
+        <option value="webspeech">WebSpeech (online)</option>
+      </select>
+      <input id="modelUrl" type="text" placeholder="モデルURL (例: https://.../vosk-model-small-ja-0.22)" />
+      <button id="loadModelBtn">モデル読み込み</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1) ぶんしょう を よみこむ</h2>
+      <textarea id="refText" rows="5" placeholder="ここに 課題文を はりつけ"></textarea>
+      <input type="file" id="refFile" accept=".txt" />
+    </section>
+
+    <section class="panel">
+      <h2>2) よみあげる</h2>
+      <div>
+        <button id="startBtn">録音開始</button>
+        <button id="stopBtn" disabled>停止</button>
+        <span id="status"></span>
+      </div>
+      <div class="live">
+        <div>ASR文字列: <span id="hypText"></span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>3) けっか</h2>
+      <div id="result"></div>
+      <div id="diff" class="diff"></div>
+      <div style="margin-top:8px">
+        <button id="exportJson">JSON保存</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>端末内で処理（ASRをWebSpeechにした場合はオンライン）。</small>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
