@@ -5,6 +5,15 @@
 - 代替: Web Speech API（ブラウザ依存, オンライン）
 - 判定: 文字整列（CER）/ 速度 / ポーズ / 総合スコア（端末内計算）
 
+## かんたんモード（小学生向け）
+
+- URL: `/web/kids.html`
+- てきすと/しゃしん/PDF から ぶんしょうを えらぶ（しゃしん/PDF はTesseract.jsでOCR）
+- ▶ よみはじめる → ■ とめる（Web Speech API）
+- すこあ/🌟/さぶん（色つき）が でます
+
+注意: iPadのSafariはWeb Speechが使えないため、かんたんモードでは録音できません。その場合はトップのしっかりモードでVoskモデルを読み込むか、PCのChromeを推奨します。
+
 ## 使い方（ローカル予行）
 
 1) 静的サーバで起動
@@ -36,6 +45,6 @@ Web Speech APIを選ぶ場合は、右上のASR選択で「WebSpeech」を選択
 
 ## 既知の注意
 - iOS Safari はマイク利用に https が必須（Pagesはhttps対応）
+- iOS SafariはWeb Speech APIの音声認識に非対応（kidsは録音不可）。
 - ブラウザ/端末メモリによりWASMモデル読込が失敗する場合があります
 - モデル読込に失敗した場合はエラーが出ます（WebSpeechに切替可能）
-
