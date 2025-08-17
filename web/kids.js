@@ -11,6 +11,16 @@ const stars=el('stars'), summary=el('summary'), diff=el('diff');
 
 let sr=null; let startT=0; let hyp='';
 
+// pdf.js のワーカーを設定（未設定だとPDFが読めません）
+try {
+  if (window.pdfjsLib) {
+    // バージョンは kids.html のCDNに合わせる
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  }
+} catch (e) {
+  // no-op
+}
+
 // 1) 入力
 btnText.addEventListener('click', ()=>{ refText.focus(); });
 btnPhoto.addEventListener('click', ()=> photoInput.click());
@@ -27,22 +37,46 @@ photoInput.addEventListener('change', async (e)=>{
 
 pdfInput.addEventListener('change', async (e)=>{
   const f=e.target.files?.[0]; if(!f) return; resetOCR();
-  ocrStatus.textContent='よみとり中（PDF）…';
-  const array = await f.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:array}).promise;
-  let all='';
-  for(let i=1;i<=pdf.numPages;i++){
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({scale:2});
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width=viewport.width; canvas.height=viewport.height;
-    await page.render({canvasContext:ctx, viewport}).promise;
-    const { data } = await Tesseract.recognize(canvas, 'jpn');
-    all += '\n' + (data.text||'');
+  try {
+    ocrStatus.textContent='よみとり中（PDF）…';
+    const array = await f.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:array}).promise;
+    let all='';
+    for(let i=1;i<=pdf.numPages;i++){
+      ocrStatus.textContent = `よみとり中（PDF ページ ${i}/${pdf.numPages}）…`;
+      const page = await pdf.getPage(i);
+      // まずはデジタルテキスト抽出（速い）
+      let pageText = '';
+      try {
+        const tc = await page.getTextContent();
+        pageText = (tc.items||[]).map(it=>it.str).join('');
+      } catch {}
+
+      if (pageText && pageText.trim().length >= 10) {
+        all += '\n' + pageText;
+        continue;
+      }
+      // だめならOCRにフォールバック（重い）
+      const viewport = page.getViewport({scale: 1.5});
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({canvasContext:ctx, viewport}).promise;
+      const { data } = await Tesseract.recognize(canvas, 'jpn', { logger: m=>{ /* progress */ } });
+      all += '\n' + (data.text||'');
+    }
+    const text = all.trim();
+    if (!text) {
+      ocrStatus.textContent = 'PDFの よみとりに しっぱいしました。しゃしん で ためすか、べつのPDFで ためしてね。';
+    } else {
+      refText.value = text;
+      ocrStatus.textContent='よみとり かんりょう！';
+    }
+  } catch (err) {
+    console.error(err);
+    ocrStatus.textContent = 'PDFを よみこめませんでした（ばーじょん/ほご など）。べつの ほうほうを ためしてね。';
   }
-  refText.value = all.trim();
-  ocrStatus.textContent='よみとり かんりょう！';
 });
 
 function resetOCR(){ ocrStatus.textContent=''; }
@@ -107,4 +141,3 @@ function colorize(pre){
 function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])) }
 
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
-
