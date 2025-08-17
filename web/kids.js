@@ -54,7 +54,20 @@ pdfInput.addEventListener('change', async (e)=>{
       let pageText = '';
       try {
         const tc = await page.getTextContent();
-        pageText = (tc.items||[]).map(it=>it.str).join('');
+        const items = (tc.items||[]);
+        const sizes = items.map(it=>{
+          const t = it.transform||[1,0,0,1,0,0];
+          const a=Math.abs(t[0]), d=Math.abs(t[3]);
+          return Math.max(a,d);
+        });
+        const med = median(sizes)||1;
+        const filtered = items.filter((it)=>{
+          const t = it.transform||[1,0,0,1,0,0];
+          const a=Math.abs(t[0]), d=Math.abs(t[3]);
+          const sz=Math.max(a,d);
+          return sz >= med*0.7;
+        });
+        pageText = filtered.map(it=>it.str).join('');
       } catch {}
 
       if (pageText && pageText.trim().length >= 10 && !isGarbled(pageText)) {
@@ -62,14 +75,9 @@ pdfInput.addEventListener('change', async (e)=>{
         continue;
       }
       // だめならOCRにフォールバック（重い）
-      const viewport = page.getViewport({scale: 1.5});
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-      await page.render({canvasContext:ctx, viewport}).promise;
-      const { data } = await Tesseract.recognize(canvas, 'jpn', { langPath: 'https://tessdata.projectnaptha.com/4.0.0', logger: m=>{ /* progress */ } });
-      all += '\n' + (data.text||'');
+      const canvas = await renderPageToCanvas(page, 1.8, 0);
+      const textOCR = await tryOcrOnCanvas(canvas);
+      all += '\n' + textOCR;
     }
     const text = all.trim();
     if (!text) {
@@ -89,17 +97,49 @@ function resetOCR(){ ocrStatus.textContent=''; }
 function isGarbled(text){
   const s = text.replace(/\s+/g,'');
   if(s.length < 10) return false;
+  const ratio = japaneseRatio(s);
+  return ratio < 0.2;
+}
+
+function japaneseRatio(s){
   let jp=0, latin=0, other=0;
   for(const ch of s){
     const code = ch.codePointAt(0);
     if(!code) continue;
-    if((code>=0x3040&&code<=0x30FF)/*ひらカナ*/ || (code>=0x4E00&&code<=0x9FFF)/*漢字*/){ jp++; }
-    else if((code>=0x0020&&code<=0x007E)/*ASCII*/){ latin++; }
+    if((code>=0x3040&&code<=0x30FF) || (code>=0x4E00&&code<=0x9FFF)){ jp++; }
+    else if((code>=0x0020&&code<=0x007E)){ latin++; }
     else { other++; }
   }
-  const ratio = jp / (jp+latin+other);
-  // 日本語率が極端に低いなら文字化けとみなす
-  return ratio < 0.2;
+  return jp / Math.max(1,(jp+latin+other));
+}
+
+function median(arr){
+  if(arr.length===0) return 0;
+  const a=[...arr].sort((x,y)=>x-y); const m=Math.floor(a.length/2);
+  return a.length%2? a[m] : (a[m-1]+a[m])/2;
+}
+
+async function renderPageToCanvas(page, scale=1.8, rotation=0){
+  const viewport = page.getViewport({scale, rotation});
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  await page.render({canvasContext:ctx, viewport}).promise;
+  return canvas;
+}
+
+async function tryOcrOnCanvas(canvas){
+  const opts = { langPath: 'https://tessdata.projectnaptha.com/4.0.0', logger: _=>{} };
+  const r1 = await Tesseract.recognize(canvas, 'jpn_vert+jpn', opts);
+  const t1 = (r1.data.text||'').trim();
+  const ratio1 = japaneseRatio(t1.replace(/\s+/g,''));
+  const c2 = document.createElement('canvas'); c2.width = canvas.height; c2.height = canvas.width;
+  const ctx2 = c2.getContext('2d'); ctx2.translate(c2.width/2, c2.height/2); ctx2.rotate(Math.PI/2); ctx2.drawImage(canvas, -canvas.width/2, -canvas.height/2);
+  const r2 = await Tesseract.recognize(c2, 'jpn_vert+jpn', opts);
+  const t2 = (r2.data.text||'').trim();
+  const ratio2 = japaneseRatio(t2.replace(/\s+/g,''));
+  return ratio2>ratio1 ? t2 : t1;
 }
 
 // 2) 録音（Web Speech API）
